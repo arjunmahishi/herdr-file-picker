@@ -45,13 +45,13 @@ export default class FilePicker extends View {
         const raw = await readTextFile(appHome() + "/file-picker.json");
         if (raw === null) throw new Error(`Create ${appHome()}/file-picker.json from config.example.json first`);
         const config = validateConfig(JSON.parse(raw));
-        for (const executable of ["fzf", config.handler.argv[0]]) {
+        for (const executable of ["fzf", ...Object.values(config.actions).map(action => action.argv[0])]) {
           const [program, ...args] = executableCommand(executable);
           await checkedExec(program, args, { cwd: origin.cwd });
         }
         const [program, ...args] = sessionCommand(appHome() + "/data/file-picker");
         this.result = (await checkedExec(program, args)).replace(/\n$/, "");
-        const started = await jsonExec("hc", ["run", "--bg", "--json", "--no-parent", "--no-notify", "--cwd", origin.cwd, "--", ...pickerCommand(this.result, config.query)]);
+        const started = await jsonExec("hc", ["run", "--bg", "--json", "--no-parent", "--no-notify", "--cwd", origin.cwd, "--", ...pickerCommand(this.result, config.query, config.actions, config.header)]);
         this.terminal = started.address;
         this.pickerOverlay = showTerminal(this.terminal, config.picker);
         let ended;
@@ -66,12 +66,12 @@ export default class FilePicker extends View {
         const output = await readTextFile(this.result);
         await unlink(this.result);
         this.result = null;
-        const selected = selectedFile(output, ended.exit_code);
+        const selected = selectedFile(output, ended.exit_code, config.actions);
         if (selected === null) return;
-        const handler = config.handler;
+        const handler = config.actions[selected.key];
         const [executable, ...checkArgs] = executableCommand(handler.argv[0]);
         await checkedExec(executable, checkArgs, { cwd: origin.cwd });
-        const argv = handlerCommand(origin.cwd, selected, handler.argv);
+        const argv = handlerCommand(origin.cwd, selected.file, handler.argv);
         if (handler.destination === "popup") {
           const opened = await jsonExec("hc", ["run", "--bg", "--json", "--no-parent", "--no-notify", "--cwd", origin.cwd, "--", ...argv]);
           try {
