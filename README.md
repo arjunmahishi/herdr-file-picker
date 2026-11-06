@@ -1,22 +1,26 @@
-# Herdr file picker
+# Herdr File Picker
 
-Pick a file with fzf without leaving Herdr, then open it in an editor or another command in a new split or popup. Bind different commands to different keys, such as Enter to edit and Ctrl+D to view a diff.
+**Your fzf, one keystroke away. You decide what every key does.**
 
-Use this if you already use fzf and want a shortcut to open files from your current terminal directory. It uses your fzf configuration. It supports local terminals and one selected file at a time.
+Press <kbd>Cmd</kbd>+<kbd>O</kbd> in Herdr and fzf opens over the terminal you're working in. Find a file, then press a key to act on it. You choose the actions: any command, on any fzf key, opening in a split or popup next to your work.
 
-![Herdr file picker](preview.png)
+![Herdr File Picker](preview.png)
 
-## Requirements
-
-- Herdr App with `hc` and `herdr-app` available
-- macOS or Linux with `/bin/sh`, `mktemp`, and fzf
-- An installed command to open the selected file; the example uses Neovim
-
-Tested with Herdr App 0.1.13 and fzf 0.43.0 on macOS. Shell and fzf tests also passed on Linux; Linux desktop integration has not been tested.
+- **Your fzf, untouched.** `FZF_DEFAULT_COMMAND`, previews, colors, and keybindings all carry over.
+- **One key per action.** Map any fzf key to any command: editors, pagers, git, diff viewers.
+- **Opens where you want.** A right split, a lower split, or a floating popup, sized your way.
+- **Cleans up after itself.** When the command exits, its split or popup closes.
 
 ## Install
 
-Run from this repository. These commands use Herdr's configured home, or `~/.config/herdr-app` by default. If `mods/file-picker` already exists there, skip the link command; do not install over it.
+Ask your Herdr agent:
+
+> Add the mod from github.com/arjunmahishi/herdr-file-picker
+
+<details>
+<summary>Or install it by hand</summary>
+
+From a clone of this repo:
 
 ```sh
 herdr_home="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
@@ -25,173 +29,127 @@ ln -s "$PWD/mods/file-picker" "$herdr_home/mods/file-picker"
 cp -i config.example.json "$herdr_home/file-picker.json"
 ```
 
-If prompted to overwrite your config, answer `n` to keep it.
-
-Edit `file-picker.json` in that directory to choose your commands. Merge this binding into Herdr's existing `keys.json`; do not replace the whole file:
+Then merge this binding into your existing `keys.json`:
 
 ```json
-{"global": {"cmd-o": "mod.open:file-picker"}}
+{ "global": { "cmd-o": "mod.open:file-picker" } }
 ```
 
-Press **Cmd+O** with a local terminal focused. You can also open the picker with:
+</details>
 
-```sh
-herdr-app do mod.open --name file-picker
-```
+**Needs:** Herdr App and [fzf](https://github.com/junegunn/fzf). Tested on macOS with Herdr App 0.1.13 and fzf 0.43.0.
 
 ## Configure
 
-Configuration is read each time the picker opens.
+Settings live in `file-picker.json` in your Herdr home. The file is read every time the picker opens, so edits take effect right away. Here's a two-key starter:
 
 ```json
 {
-  "query": "",
-  "header": true,
-  "picker": { "width": 0.75, "height": 0.65 },
   "actions": {
-    "enter": {
-      "argv": ["nvim", "--", "{file}"],
-      "label": "edit",
-      "destination": "right"
-    },
-    "ctrl-d": {
-      "argv": ["git", "diff", "--", "{file}"],
-      "label": "diff",
-      "destination": "popup"
-    }
+    "enter":  { "argv": ["nvim", "--", "{file}"], "label": "edit" },
+    "ctrl-d": { "argv": ["git", "diff", "--", "{file}"], "label": "diff", "destination": "popup" }
   }
 }
 ```
 
-`actions` maps fzf key names to commands. An `enter` action is required. Press an action's key in fzf to open the highlighted file with that action. Key names follow fzf's `--expect` option, such as `ctrl-d`, `alt-x`, or `f2`; see `man fzf` for the full list. Action keys replace any fzf binding for the same key.
+Each key under `actions` is an fzf key name (`enter`, `ctrl-d`, `alt-x`, `f2`, …), and you must define `enter`. `argv` is the command to run. `{file}` is replaced with the path you picked. A header above the list shows each key's label.
 
-By default, the picker shows a header listing each key and its label, such as `enter: edit  ·  ctrl-d: diff`. Set `"header": false` to hide it.
+<details>
+<summary>All settings</summary>
 
-Each action's `argv` is required. Put `{file}` in an argument where the selected path should go, not in the command name. Each array item is a separate argument. Include `--` before the path if your command supports it, so filenames beginning with `-` are not treated as options.
-
-| Setting | Meaning | Default |
+| Setting | What it does | Default |
 | --- | --- | --- |
-| `query` | Initial fzf search text | Empty |
-| `header` | Show action keys and labels above the list | `true` |
-| `picker.width`, `picker.height` | Picker popup dimensions | `0.75`, `0.65` |
-| `label` | Action name shown in the header | The command name, `argv[0]` |
-| `destination` | `right`, `down`, or `popup` | `right` |
-| `size` | Split width (`right`) or height (`down`), in logical pixels; at least `1` | Herdr's default |
-| `width`, `height` | Action popup dimensions; use instead of `size` for `popup` | `0.6`, `0.5` |
+| `query` | Initial search text | `""` |
+| `header` | Show the key/label header | `true` |
+| `picker.width`, `picker.height` | Picker size | `0.75`, `0.65` |
+| `actions.<key>.argv` | Command to run; `{file}` goes in an argument, not the command name | required |
+| `actions.<key>.label` | Name shown in the header | the command name |
+| `actions.<key>.destination` | `right`, `down`, or `popup` | `right` |
+| `actions.<key>.size` | Split width or height, in pixels | Herdr's default |
+| `actions.<key>.width`, `.height` | Popup size | `0.6`, `0.5` |
 
-Popup dimensions must be positive: values up to and including `1` are fractions of the window; larger values are pixels. Available window space may constrain split sizes.
+Sizes up to `1` are fractions of the window. Larger values are pixels.
 
-Both fzf and your command use the directory captured when the picker opens. Splits target the original pane even if focus changes. Exiting the command closes its split or popup. Escape cancels the picker without opening anything; dismissing a popup stops its command.
+</details>
 
-## Examples
+## Recipes
 
-Each example is a complete `file-picker.json` with a single `enter` action. To combine them, give each action its own key under `actions`. Install the commands an example uses first. Run Git examples from a Git repository.
+Paste any of these under `actions`, and swap the key if you like.
 
-### Edit in a Neovim popup
+<details>
+<summary><b>Edit in a big floating Neovim</b></summary>
 
 ```json
-{
-  "actions": {
-    "enter": {
-      "argv": ["nvim", "--", "{file}"],
-      "destination": "popup",
-      "width": 0.9,
-      "height": 0.85
-    }
-  }
+"enter": {
+  "argv": ["nvim", "--", "{file}"],
+  "label": "edit",
+  "destination": "popup", "width": 0.9, "height": 0.85
 }
 ```
 
-### Read a file with less
+</details>
 
-Open a read-only viewer in a right split. Press `q` to close it.
+<details>
+<summary><b>Peek at a file</b> without opening an editor</summary>
 
 ```json
-{
-  "actions": {
-    "enter": {
-      "argv": ["less", "--", "{file}"],
-      "destination": "right",
-      "size": 700
-    }
-  }
+"ctrl-v": {
+  "argv": ["less", "--", "{file}"],
+  "label": "peek",
+  "destination": "right", "size": 700
 }
 ```
 
-### View a file's Git diff
+Press <kbd>q</kbd> to close it.
 
-Show unstaged changes with Git and less.
+</details>
+
+<details>
+<summary><b>See what changed</b> in a file</summary>
 
 ```json
-{
-  "actions": {
-    "enter": {
-      "argv": ["sh", "-c", "git diff --color=always -- \"$1\" | less -R", "file-diff", "{file}"],
-      "destination": "popup",
-      "width": 0.8,
-      "height": 0.8
-    }
-  }
+"ctrl-d": {
+  "argv": ["sh", "-c", "git diff --color=always -- \"$1\" | less -R", "diff", "{file}"],
+  "label": "diff",
+  "destination": "popup", "width": 0.8, "height": 0.8
 }
 ```
 
-Pass `{file}` as a separate shell argument, as above. Do not insert it into shell script text.
+To use a shell pipeline, pass `{file}` as its own argument (`"$1"`), never inside the script text.
 
-### Review changes with Hunk
+</details>
 
-Show the selected file's working-tree diff.
+<details>
+<summary><b>Review changes in <a href="https://github.com/modem-dev/hunk">Hunk</a></b></summary>
 
 ```json
-{
-  "actions": {
-    "enter": {
-      "argv": ["hunk", "diff", "--", "{file}"],
-      "destination": "popup",
-      "width": 0.95,
-      "height": 0.9
-    }
-  }
+"alt-d": {
+  "argv": ["hunk", "diff", "--", "{file}"],
+  "label": "review",
+  "destination": "popup", "width": 0.95, "height": 0.9
 }
 ```
 
-For staged Git changes, replace `argv` with `["hunk", "diff", "--staged", "--", "{file}"]`.
+For staged changes, use `["hunk", "diff", "--staged", "--", "{file}"]`.
 
-### Inspect the last commit with Hunk
+</details>
 
-Show what the last commit changed in the selected file.
+<details>
+<summary><b>Dig through a file's history</b></summary>
 
 ```json
-{
-  "actions": {
-    "enter": {
-      "argv": ["hunk", "show", "--", "{file}"],
-      "destination": "popup",
-      "width": 0.95,
-      "height": 0.9
-    }
-  }
+"ctrl-l": {
+  "argv": ["git", "log", "--follow", "-p", "--", "{file}"],
+  "label": "history",
+  "destination": "popup", "width": 0.9, "height": 0.85
 }
 ```
 
-### Browse a file's Git history
+</details>
 
-Show commits and patches, following renames. Git uses your configured pager.
+## Good to know
 
-```json
-{
-  "actions": {
-    "enter": {
-      "argv": ["git", "log", "--follow", "-p", "--", "{file}"],
-      "destination": "popup",
-      "width": 0.9,
-      "height": 0.85
-    }
-  }
-}
-```
-
-## Your fzf settings
-
-Use `FZF_DEFAULT_COMMAND` and `FZF_DEFAULT_OPTS` to configure file discovery, previews, filtering, and ordering.
-
-The picker requires one selected path and sets fzf's `--expect` from your actions. Do not set `--expect` or `--print-query` yourself, and avoid multiple selections and bindings that print extra output. When `header` is `true`, it replaces any `--header` from your fzf options. Opening another picker cancels the existing one.
+- Works in local terminals, one file at a time.
+- Action keys take over fzf's own bindings for the same key. Avoid plain letters, or you won't be able to type them in the search.
+- Don't put `--expect`, `--print-query`, or `--multi` in `FZF_DEFAULT_OPTS`. The picker needs fzf's normal output.
+- Pagers that quit on short output (such as `less -F`) close their split right away.
