@@ -1,41 +1,39 @@
 # Herdr file picker
 
-Run your own fzf configuration in a Herdr popup. Select a file to run a command with that path in a new split or popup. Exiting the command closes its surface; canceling the picker opens nothing.
+Pick a file with fzf without leaving Herdr, then open it in an editor or another command in a new split or popup.
 
-No editor integration, file discovery, sorting, or ignore rules are implemented by this mod. fzf and its environment decide those things.
+Use this if you already use fzf and want a shortcut to open files from your current terminal directory. It uses your fzf configuration. It supports local terminals and one selected file at a time.
+
+![Herdr file picker](preview.png)
 
 ## Requirements
 
-- Herdr App 0.1.13 and its `hc` command
-- macOS or Linux with `/bin/sh` and `mktemp`
-- fzf (tested with 0.43.0)
-- The command you configure as the handler
+- Herdr App with `hc` and `herdr-app` available
+- macOS or Linux with `/bin/sh`, `mktemp`, and fzf
+- An installed command to open the selected file; the example uses Neovim
 
-Local terminals only. No Python, Node.js, or npm is needed to run the mod. Node.js is used only for development tests. Windows is not supported.
+Tested with Herdr App 0.1.13 and fzf 0.43.0 on macOS. Shell and fzf tests also passed on Linux; Linux desktop integration has not been tested.
 
-Desktop integration is tested on macOS. Shell and fzf integration tests also pass in a Debian Linux container.
+## Install
 
-## Install locally
-
-From this repository, with Herdr already installed:
+Run from this repository. These commands use Herdr's configured home, or `~/.config/herdr-app` by default. If `mods/file-picker` already exists there, skip the link command; do not install over it.
 
 ```sh
-ln -s "$PWD/mods/file-picker" "$HOME/.config/herdr-app/mods/file-picker"
-cp config.example.json "$HOME/.config/herdr-app/file-picker.json"
-herdr-app check "$HOME/.config/herdr-app/mods/file-picker"
+herdr_home="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
+mkdir -p "$herdr_home/mods"
+ln -s "$PWD/mods/file-picker" "$herdr_home/mods/file-picker"
+cp -i config.example.json "$herdr_home/file-picker.json"
 ```
 
-Do not overwrite an existing mod or config. Change the example's handler to your preferred command. Config can itself be a symlink to your dotfiles.
+If prompted to overwrite your config, answer `n` to keep it.
 
-When developing through a directory symlink, Herdr may need `touch -h "$HOME/.config/herdr-app/mods/file-picker"` to notice source changes.
-
-Merge the example `keys.json` binding into your existing Herdr keys; do not replace the whole file:
+Edit `file-picker.json` in that directory to choose your command. Merge this binding into Herdr's existing `keys.json`; do not replace the whole file:
 
 ```json
 {"global": {"cmd-o": "mod.open:file-picker"}}
 ```
 
-Or open it without a binding:
+Press **Cmd+O** with a local terminal focused. You can also open the picker with:
 
 ```sh
 herdr-app do mod.open --name file-picker
@@ -43,7 +41,7 @@ herdr-app do mod.open --name file-picker
 
 ## Configure
 
-Herdr reads `~/.config/herdr-app/file-picker.json` on each invocation (`$HERDR_APP_HOME/file-picker.json` for a custom home).
+Configuration is read each time the picker opens.
 
 ```json
 {
@@ -51,24 +49,59 @@ Herdr reads `~/.config/herdr-app/file-picker.json` on each invocation (`$HERDR_A
   "picker": { "width": 0.75, "height": 0.65 },
   "handler": {
     "argv": ["nvim", "--", "{file}"],
+    "destination": "right"
+  }
+}
+```
+
+`handler.argv` is required. Put `{file}` in an argument where the selected path should go, not in the command name. Each array item is a separate argument. Include `--` before the path if your command supports it, so filenames beginning with `-` are not treated as options.
+
+| Setting | Meaning | Default |
+| --- | --- | --- |
+| `query` | Initial fzf search text | Empty |
+| `picker.width`, `picker.height` | Picker popup dimensions | `0.75`, `0.65` |
+| `handler.destination` | `right`, `down`, or `popup` | `right` |
+| `handler.size` | Split width (`right`) or height (`down`), in logical pixels; at least `1` | Herdr's default |
+| `handler.width`, `handler.height` | Handler popup dimensions; use instead of `size` for `popup` | `0.6`, `0.5` |
+
+Popup dimensions must be positive: values up to and including `1` are fractions of the window; larger values are pixels. Available window space may constrain split sizes.
+
+Both fzf and your command use the directory captured when the picker opens. Splits target the original pane even if focus changes. Exiting the command closes its split or popup. Escape cancels the picker without opening anything; dismissing a popup stops its command.
+
+## Examples
+
+Use any of these as your `file-picker.json`. Install the commands it uses first. Run Git examples from a Git repository.
+
+### Edit in a Neovim popup
+
+```json
+{
+  "handler": {
+    "argv": ["nvim", "--", "{file}"],
+    "destination": "popup",
+    "width": 0.9,
+    "height": 0.85
+  }
+}
+```
+
+### Read a file with less
+
+Open a read-only viewer in a right split. Press `q` to close it.
+
+```json
+{
+  "handler": {
+    "argv": ["less", "--", "{file}"],
     "destination": "right",
     "size": 700
   }
 }
 ```
 
-- `query`: initial fzf query. Empty by default. This does not set candidate ordering.
-- `picker.width` / `height`: pixels, or window fractions from 0 to 1. Defaults: 0.75 and 0.65.
-- `handler.argv`: required command argument array. `{file}` is replaced literally in arguments, never evaluated as shell code. Include your command's end-of-options marker if it supports one.
-- `handler.destination`: `right` (default), `down`, or `popup`.
-- `handler.size`: optional split width (`right`) or height (`down`), in logical pixels. Omit it for Herdr's native split sizing. The window and sibling panes may constrain the requested size.
-- For `popup`, use `handler.width` / `height` instead of `size`; defaults are 0.6 and 0.5. These accept pixels or window fractions, like the picker dimensions.
+### View a file's Git diff
 
-Both fzf and the handler run in the directory captured from the focused terminal when the picker opens. Selection targets that original pane even if focus changes. Config changes apply the next time you open the picker.
-
-### A diff viewer instead of an editor
-
-For example, to view one file's diff with a pager:
+Show unstaged changes with Git and less.
 
 ```json
 {
@@ -81,27 +114,57 @@ For example, to view one file's diff with a pager:
 }
 ```
 
-The file is a positional shell argument, not interpolated into the script. The handler must remain running while you want its pane visible. A command that exits immediately produces no persistent pane.
+Pass `{file}` as a separate shell argument, as above. Do not insert it into shell script text.
 
-### fzf configuration
+### Review changes with Hunk
 
-Your `FZF_DEFAULT_COMMAND` and `FZF_DEFAULT_OPTS` remain in effect. Configure candidate generation, ignores, hidden files, previews, and ordering there. This mod does not provide a newest-first command.
+Show the selected file's working-tree diff.
 
-The mod reserves single selection and NUL-delimited output. Avoid options/bindings that change the output protocol, such as `--expect`, multiple selections, or actions that print extra output.
-
-## Lifecycle and limitations
-
-- Escape cancels fzf normally. Closing a terminal popup externally kills its command through a cleanup hook.
-- Picker results use private, per-invocation files under Herdr's `data/file-picker/`, removed after completion or normal cancellation.
-- Cleanup is best effort on application quit; a forced termination may leave a terminal or result file. Herdr limits mod cleanup time.
-- Run one picker at a time. Opening another via the binding while one is active cancels the existing invocation.
-- This mod runs local programs and reads its config and selection results. It does not make network requests. Your configured fzf commands and handler may do more.
-
-## Tests
-
-```sh
-npm test
-herdr-app check mods/file-picker
+```json
+{
+  "handler": {
+    "argv": ["hunk", "diff", "--", "{file}"],
+    "destination": "popup",
+    "width": 0.95,
+    "height": 0.9
+  }
+}
 ```
 
-Tests require Node.js 18+ and fzf. They run real POSIX shell commands and the actual fzf binary for argument transport, private sessions, matching, cancellation, and protocol errors. No npm packages or installation step are required.
+For staged Git changes, replace `argv` with `["hunk", "diff", "--staged", "--", "{file}"]`.
+
+### Inspect the last commit with Hunk
+
+Show what the last commit changed in the selected file.
+
+```json
+{
+  "handler": {
+    "argv": ["hunk", "show", "--", "{file}"],
+    "destination": "popup",
+    "width": 0.95,
+    "height": 0.9
+  }
+}
+```
+
+### Browse a file's Git history
+
+Show commits and patches, following renames. Git uses your configured pager.
+
+```json
+{
+  "handler": {
+    "argv": ["git", "log", "--follow", "-p", "--", "{file}"],
+    "destination": "popup",
+    "width": 0.9,
+    "height": 0.85
+  }
+}
+```
+
+## Your fzf settings
+
+Use `FZF_DEFAULT_COMMAND` and `FZF_DEFAULT_OPTS` to configure file discovery, previews, filtering, and ordering.
+
+The picker requires one selected path. Avoid `--expect`, multiple selections, and bindings that print extra output. Opening another picker cancels the existing one.
