@@ -1,10 +1,16 @@
 import { View, div } from "gpui-kit";
+import { unlink } from "fs/promises";
+import { validateConfig, sessionCommand, executableCommand, pickerCommand, selectedFile, handlerCommand } from "./picker.js";
 import { appHome, focused, spaces, exec, readTextFile, openOverlay, closeOverlay, props, notify } from "herdr";
 
-async function jsonExec(program, args, options) {
+async function checkedExec(program, args, options) {
   const result = await exec(program, args, options);
   if (result.code !== 0) throw new Error(result.stderr.trim() || `${program} exited with code ${result.code}`);
-  return JSON.parse(result.stdout);
+  return result.stdout;
+}
+
+async function jsonExec(program, args, options) {
+  return JSON.parse(await checkedExec(program, args, options));
 }
 
 async function killTerminal(terminal) {
@@ -32,17 +38,20 @@ export default class FilePicker extends View {
     this.launcher = props()?.overlay;
     if (!this.launcher) return;
     const origin = focused();
-    this.runner = appHome() + "/mods/file-picker/runner.py";
     cx.spawn(async () => {
       try {
         if (!origin?.pane || !origin.cwd) throw new Error("Focus a local terminal pane first");
         if (spaces().find(s => s.id === origin.space)?.machine) throw new Error("Remote terminals are not supported");
         const raw = await readTextFile(appHome() + "/file-picker.json");
         if (raw === null) throw new Error(`Create ${appHome()}/file-picker.json from config.example.json first`);
-        const prepared = await jsonExec("python3", [this.runner, "prepare", raw, origin.cwd, appHome() + "/data/file-picker"]);
-        this.result = prepared.result;
-        const config = prepared.config;
-        const started = await jsonExec("hc", ["run", "--bg", "--json", "--no-parent", "--no-notify", "--cwd", origin.cwd, "--", "python3", this.runner, "pick", this.result, config.query]);
+        const config = validateConfig(JSON.parse(raw));
+        for (const executable of ["fzf", config.handler.argv[0]]) {
+          const [program, ...args] = executableCommand(executable);
+          await checkedExec(program, args, { cwd: origin.cwd });
+        }
+        const [program, ...args] = sessionCommand(appHome() + "/data/file-picker");
+        this.result = (await checkedExec(program, args)).replace(/\n$/, "");
+        const started = await jsonExec("hc", ["run", "--bg", "--json", "--no-parent", "--no-notify", "--cwd", origin.cwd, "--", ...pickerCommand(this.result, config.query)]);
         this.terminal = started.address;
         this.pickerOverlay = showTerminal(this.terminal, config.picker);
         let ended;
@@ -54,13 +63,15 @@ export default class FilePicker extends View {
         this.terminal = null;
         await jsonExec("hc", ["rm", terminal]);
         if (ended.signal) return;
-        const outcome = await jsonExec("python3", [this.runner, "result", this.result]);
+        const output = await readTextFile(this.result);
+        await unlink(this.result);
         this.result = null;
-        if (outcome.error) throw new Error(outcome.error);
-        if (outcome.cancelled) return;
-        if (typeof outcome.file !== "string") throw new Error("fzf returned no selected path");
+        const selected = selectedFile(output, ended.exit_code);
+        if (selected === null) return;
         const handler = config.handler;
-        const argv = await jsonExec("python3", [this.runner, "handler", origin.cwd, outcome.file, JSON.stringify(handler.argv)]);
+        const [executable, ...checkArgs] = executableCommand(handler.argv[0]);
+        await checkedExec(executable, checkArgs, { cwd: origin.cwd });
+        const argv = handlerCommand(origin.cwd, selected, handler.argv);
         if (handler.destination === "popup") {
           const opened = await jsonExec("hc", ["run", "--bg", "--json", "--no-parent", "--no-notify", "--cwd", origin.cwd, "--", ...argv]);
           try {
@@ -87,7 +98,7 @@ export default class FilePicker extends View {
     try {
       if (this.terminal) await killTerminal(this.terminal);
       if (this.pickerOverlay) closeOverlay(this.pickerOverlay);
-      if (this.result) await jsonExec("python3", [this.runner, "discard", this.result]);
+      if (this.result) await unlink(this.result);
     } catch (error) {
       console.log("File picker cleanup failed: " + String(error));
       notify({ title: "File picker cleanup failed", body: String(error), level: "error" });

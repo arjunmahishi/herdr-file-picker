@@ -15,20 +15,20 @@ Open via `mod.open:file-picker`. Capture the focused local terminal's directory 
 ## Built from
 
 - `mods/file-picker/main.js`: GPUI View controller, terminal-overlay layouts, cleanup-only child View, configuration loading, notifications, and Herdr command orchestration.
-- `mods/file-picker/runner.py`: standard-library helper for config validation, private session files, native fzf execution, literal path substitution, and replacing itself with the configured command.
+- `mods/file-picker/picker.js`: config validation, selection parsing, and POSIX command argument builders. `/bin/sh` redirects fzf's NUL-delimited output to a private `mktemp` file and executes the handler with positional arguments. No Python or Node runtime is needed.
 - `mod.json`: overlay entry point; `keys.json`: optional Cmd+O example binding.
 - `file-picker.json` in the Herdr home: user-owned config, not bundled mutable state.
-- APIs: `focused`, `spaces`, `exec`, `readTextFile`, `openOverlay`, `closeOverlay`, `props`, and `notify`.
+- APIs: `focused`, `spaces`, `exec`, `readTextFile`, `openOverlay`, `closeOverlay`, `props`, `notify`, and `fs/promises.unlink`.
 - Commands: `hc run/wait/kill/rm`, `pane.split`, and `layout.resize` (accepts pane IDs).
 - No layout replacement, daemon, file scanner, network access, or editor-specific code.
 
 ## Watch out
 
-`exec` has a 30-second timeout. Start interactive commands with `hc run --bg`, display their terminals in overlay layout blocks, and wait using `hc wait --timeout 20`, not long-running `exec` or timer polling. Terminal overlays forward Escape to fzf and close on terminal exit, but closing an overlay externally does not kill its process: include a cleanup View. Give each invocation its own result file; do not share a pending/result filename. Herdr cleanup is bounded and cannot guarantee recovery after forced termination. Split sizes are logical pixels; do not rewrite unrelated sibling weights. Native fzf owns file generation and ordering; initial query is not an ordering setting. Local terminals and single-file selection only.
+`exec` has a 30-second timeout. Start interactive commands with `hc run --bg`, display their terminals in overlay layout blocks, and wait using `hc wait --timeout 20`, not long-running `exec` or timer polling. Terminal overlays forward Escape to fzf and close on terminal exit, but closing an overlay externally does not kill its process: include a cleanup View. Give each invocation its own result file; do not share a pending/result filename. Parse the raw NUL-delimited path without trimming whitespace; use `hc wait` for fzf's exit code. Keep paths and queries in positional shell arguments, never in shell source. Herdr cleanup is bounded and cannot guarantee recovery after forced termination. Split sizes are logical pixels; do not rewrite unrelated sibling weights. Native fzf owns file generation and ordering; initial query is not an ordering setting. Local terminals and single-file selection only.
 
 ## Done when
 
-- `herdr-app check mods/file-picker` passes and the Python tests pass with real fzf.
+- `herdr-app check mods/file-picker` and `npm test` pass with real fzf.
 - A picker appears over the terminal, without creating a split, and uses the captured current directory.
 - Selecting a path preserves whitespace and shell metacharacters as literal arguments.
 - Right/down splits and handler popups open, obey configured sizes within window constraints, and disappear on command exit.

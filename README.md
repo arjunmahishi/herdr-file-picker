@@ -7,11 +7,13 @@ No editor integration, file discovery, sorting, or ignore rules are implemented 
 ## Requirements
 
 - Herdr App 0.1.13 and its `hc` command
-- Python 3.8 or newer
+- macOS or Linux with `/bin/sh` and `mktemp`
 - fzf (tested with 0.43.0)
 - The command you configure as the handler
 
-Local terminals only. Tested on macOS; other platforms are not certified.
+Local terminals only. No Python, Node.js, or npm is needed to run the mod. Node.js is used only for development tests. Windows is not supported.
+
+Desktop integration is tested on macOS. Shell and fzf integration tests also pass in a Debian Linux container.
 
 ## Install locally
 
@@ -24,6 +26,8 @@ herdr-app check "$HOME/.config/herdr-app/mods/file-picker"
 ```
 
 Do not overwrite an existing mod or config. Change the example's handler to your preferred command. Config can itself be a symlink to your dotfiles.
+
+When developing through a directory symlink, Herdr may need `touch -h "$HOME/.config/herdr-app/mods/file-picker"` to notice source changes.
 
 Merge the example `keys.json` binding into your existing Herdr keys; do not replace the whole file:
 
@@ -96,8 +100,8 @@ The mod reserves single selection and NUL-delimited output. Avoid options/bindin
 ## Tests
 
 ```sh
-python3 -m unittest discover -s tests -v
+npm test
 herdr-app check mods/file-picker
 ```
 
-Tests run the actual fzf binary for matching, cancellation, and protocol errors. No Python packages are required.
+Tests require Node.js 18+ and fzf. They run real POSIX shell commands and the actual fzf binary for argument transport, private sessions, matching, cancellation, and protocol errors. No npm packages or installation step are required.
